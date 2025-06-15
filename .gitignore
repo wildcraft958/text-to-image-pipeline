@@ -2,8 +2,17 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
+**/__pycache__/
+**/__init__.py[cod]
+.cpython-*/
 # C extensions
+# Prevent CPython compiled files from being committed
+.cpython-*
+*.so
+*.pyd
+*.pyc
+__pycache__/
+
 *.so
 
 ./credentials.json
