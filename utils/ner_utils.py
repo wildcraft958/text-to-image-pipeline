@@ -1,35 +1,50 @@
 import spacy
 from typing import List, Dict, Set
 import re
+import subprocess
+import sys
 
 class NERProcessor:
     def __init__(self):
         """Initialize NLP processor with spaCy"""
+        self.nlp = self._load_spacy_model()
+    
+    def _load_spacy_model(self):
+        """Load spaCy model with automatic download if needed"""
         try:
-            self.nlp = spacy.load("en_core_web_sm")
+            return spacy.load("en_core_web_sm")
         except OSError:
-            print("Warning: spaCy model not found. Installing...")
-            import subprocess
-            subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
-            self.nlp = spacy.load("en_core_web_sm")
+            print("📦 Installing spaCy English model...")
+            try:
+                subprocess.check_call([
+                    sys.executable, "-m", "spacy", "download", "en_core_web_sm"
+                ])
+                return spacy.load("en_core_web_sm")
+            except subprocess.CalledProcessError as e:
+                print(f"❌ Failed to install spaCy model: {e}")
+                # Return a minimal processor that doesn't use spaCy
+                return None
     
     def extract_entities(self, text: str, keywords: List[str]) -> Dict[str, List[str]]:
         """Extract named entities from text and keywords"""
+        entities = {
+            "PERSON": [],
+            "ORG": [],
+            "GPE": [],  # Geopolitical entities
+            "PRODUCT": [],
+            "EVENT": [],
+            "ART": [],  # Artworks, books, songs
+            "OTHER": []
+        }
+        
+        if not self.nlp:
+            return entities
+            
         # Combine text and keywords
         full_text = f"{text} {' '.join(keywords)}"
         
         # Process with spaCy
         doc = self.nlp(full_text)
-        
-        entities = {
-            "PERSON": [],
-            "ORG": [],
-            "GPE": [],  # Geopolitical entities (countries, cities, states)
-            "PRODUCT": [],
-            "EVENT": [],
-            "ART": [],  # Artworks, books, songs, etc.
-            "OTHER": []
-        }
         
         for ent in doc.ents:
             if ent.label_ in entities:
@@ -46,6 +61,9 @@ class NERProcessor:
     def enhance_keywords(self, keywords: List[str]) -> List[str]:
         """Enhance keywords by extracting key phrases and lemmatizing"""
         enhanced = set(keywords)
+        
+        if not self.nlp:
+            return list(enhanced)
         
         for keyword in keywords:
             doc = self.nlp(keyword)

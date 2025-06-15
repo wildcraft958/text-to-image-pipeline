@@ -3,7 +3,7 @@ from typing import Dict, Any
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
 from pipeline.state import PipelineState
-from pipeline.nodes import PipelineNodes, should_use_cache, has_error
+from pipeline.nodes import PipelineNodes
 
 class TextToImagePipeline:
     def __init__(self):
@@ -32,16 +32,26 @@ class TextToImagePipeline:
         graph.add_edge(START, "process_input")
         graph.add_edge("process_input", "check_cache")
         
-        # Conditional routing based on cache
+        # Fixed conditional routing
+        def route_after_cache(state: PipelineState) -> str:
+            """Route based on cache availability"""
+            if state.get('cached_prompt'):
+                print(f"✅ Using cached prompt: {state['cached_prompt'][:50]}...")
+                return "generate_image"
+            else:
+                print("🔄 No cache found, generating new prompt...")
+                return "generate_prompt"
+        
         graph.add_conditional_edges(
             "check_cache",
-            should_use_cache,
+            route_after_cache,
             {
                 "generate_prompt": "generate_prompt",
                 "generate_image": "generate_image"
             }
         )
         
+        # Ensure generate_prompt always leads to generate_image
         graph.add_edge("generate_prompt", "generate_image")
         graph.add_edge("generate_image", "update_cache")
         graph.add_edge("update_cache", "finalize_response")
@@ -56,7 +66,7 @@ class TextToImagePipeline:
                             description: str = None) -> Dict[str, Any]:
         """Process a text-to-image request"""
         
-        # Initialize state
+        # Initialize state with start_time
         initial_state = PipelineState(
             user_id=user_id,
             title=title,
@@ -80,8 +90,12 @@ class TextToImagePipeline:
         config = {"configurable": {"thread_id": f"user_{user_id}"}}
         
         try:
+            print(f"🚀 Starting pipeline for: {title}")
+            
             # Run the pipeline
             result = await self.compiled_graph.ainvoke(initial_state, config)
+            
+            print(f"📊 Pipeline completed. Success: {not bool(result.get('error'))}")
             
             return {
                 "success": not bool(result.get('error')),
@@ -94,6 +108,7 @@ class TextToImagePipeline:
             }
             
         except Exception as e:
+            print(f"💥 Pipeline execution failed: {str(e)}")
             return {
                 "success": False,
                 "error": f"Pipeline execution failed: {str(e)}",

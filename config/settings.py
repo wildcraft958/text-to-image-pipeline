@@ -12,12 +12,12 @@ class Settings(BaseSettings):
     LANGFUSE_SECRET_KEY: str = os.getenv("LANGFUSE_SECRET_KEY", "")
     LANGFUSE_HOST: str = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
     
-    # Model Configuration
-    LLM_MODEL: str = "gemma-3n-e4b-it"
-    IMAGE_MODEL: str = "imagen-3.0-generate-002"
-    
+    # Model Configuration - CORRECTED NAMES
+    LLM_MODEL: str = "gemini-1.5-flash-002"
+    IMAGE_MODEL: str = "imagen-3.0-generate-001"
+
     # Cache Configuration
-    CACHE_TTL: int = 3600  # 1 hour
+    CACHE_TTL: int = 3600
     SIMILARITY_THRESHOLD: float = 0.85
     
     # API Configuration
