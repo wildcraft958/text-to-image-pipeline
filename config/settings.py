@@ -1,5 +1,6 @@
 import os
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
 
 class Settings(BaseSettings):
     # Google Cloud Configuration
@@ -23,8 +24,14 @@ class Settings(BaseSettings):
     # API Configuration
     API_HOST: str = "127.0.0.1"
     API_PORT: int = 8000
-    
-    class Config:
-        env_file = ".env"
+
+    # add this line so Pydantic knows about your GCP key
+    GOOGLE_AI_STUDIO_API_KEY: str
+
+    model_config = ConfigDict(
+        env_file='.env',
+        case_sensitive=True,
+        extra='ignore'  # ignore any other env vars you don’t declare
+    )
 
 settings = Settings()

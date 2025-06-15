@@ -87,9 +87,9 @@ Generate the image prompt now.
 
         try:
             response = self.gemma_client.models.generate_content(
-                model=settings.LLM_MODEL,  # This should be 'gemma-3n-e4b-it'
-                contents=prompt_template,
-                config=self.gemma_config
+                contents=[prompt_template],           
+                model_name=self.model_name,
+                temperature=self.temperature,
             )
             
             if response and response.text:
