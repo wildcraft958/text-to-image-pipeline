@@ -6,6 +6,8 @@ __pycache__/
 # C extensions
 *.so
 
+./credentials.json
+
 # Distribution / packaging
 .Python
 build/
@@ -192,3 +194,4 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+credentials.json
