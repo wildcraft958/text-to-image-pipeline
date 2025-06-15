@@ -18,16 +18,18 @@ class PipelineState(TypedDict):
     
     # LLM Generation
     generated_prompt: Optional[str]
-    prompt_complexity: Optional[str]  # "simple" or "complex"
+    prompt_complexity: Optional[str]
+    prompt_source: Optional[str]  # Track whether prompt came from Gemma or fallback
     
     # Image Generation
     image_url: Optional[str]
-    image_data: Optional[bytes]
+    image_data: Optional[str]  # Base64 encoded image data
     
     # Metadata
     processing_time: float
     used_cache: bool
     error: Optional[str]
+    start_time: float
 
 class UserInput(BaseModel):
     """Input model for API requests"""
@@ -40,7 +42,9 @@ class PipelineResponse(BaseModel):
     """Response model for the pipeline"""
     success: bool
     image_url: Optional[str] = None
+    image_data: Optional[str] = None
     prompt_used: Optional[str] = None
+    prompt_source: Optional[str] = None  # Added to track prompt source
     processing_time: float
     used_cache: bool
     error: Optional[str] = None

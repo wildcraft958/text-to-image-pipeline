@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🖼️ AI Text-to-Image Generator</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+            font-size: 1.1em;
+        }
+
+        input[type="text"], textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+            box-sizing: border-box;
+        }
+
+        input[type="text"]:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+
+        .generate-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 10px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 20px;
+            transition: transform 0.2s;
+        }
+
+        .generate-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .generate-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .test-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .result.success {
+            border-left: 5px solid #28a745;
+        }
+
+        .result.error {
+            border-left: 5px solid #dc3545;
+            background: #f8d7da;
+        }
+
+        .generated-image {
+            max-width: 100%;
+            border-radius: 10px;
+            margin: 20px 0;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .info-item {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #667eea;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .info-value {
+            color: #333;
+            font-size: 1.1em;
+        }
+
+        .prompt-display {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-family: monospace;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .download-btn {
+            background: #17a2b8;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-connected { background: #28a745; }
+        .status-error { background: #dc3545; }
+        .status-warning { background: #ffc107; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🖼️ AI Text-to-Image Generator</h1>
+        
+        <button type="button" class="test-btn" onclick="testConnection()">
+            🔌 Test Connection
+        </button>
+        <div id="connection-status"></div>
+
+        <form id="image-form">
+            <div class="form-group">
+                <label for="user_id">👤 User ID:</label>
+                <input type="text" id="user_id" name="user_id" value="demo_user" required>
+            </div>
+
+            <div class="form-group">
+                <label for="title">📝 Title:</label>
+                <input type="text" id="title" name="title" placeholder="e.g., Sunset over mountain lake" required>
+            </div>
+
+            <div class="form-group">
+                <label for="keywords">🏷️ Keywords (comma-separated):</label>
+                <input type="text" id="keywords" name="keywords" placeholder="e.g., sunset, mountain, lake, peaceful" required>
+            </div>
+
+            <div class="form-group">
+                <label for="description">📄 Description (optional):</label>
+                <textarea id="description" name="description" placeholder="Additional details about the image you want to generate..."></textarea>
+            </div>
+
+            <button type="submit" class="generate-btn" id="generate-btn">
+                🚀 Generate Image
+            </button>
+        </form>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Generating your image... This may take up to 2 minutes.</p>
+        </div>
+
+        <div class="result" id="result">
+            <!-- Results will be displayed here -->
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8000';
+
+        async function testConnection() {
+            const statusDiv = document.getElementById('connection-status');
+            statusDiv.innerHTML = '<p>Testing connection...</p>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                
+                let statusHTML = '<h3>🔍 Service Status:</h3>';
+                for (const [service, status] of Object.entries(data.services)) {
+                    const indicator = status === 'connected' || status === 'active' ? 'status-connected' : 
+                                    status.includes('error') ? 'status-error' : 'status-warning';
+                    statusHTML += `<p><span class="status-indicator ${indicator}"></span>${service}: ${status}</p>`;
+                }
+                
+                statusDiv.innerHTML = statusHTML;
+            } catch (error) {
+                statusDiv.innerHTML = `<p style="color: red;">❌ Connection failed: ${error.message}</p>`;
+            }
+        }
+
+        document.getElementById('image-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const keywords = formData.get('keywords').split(',').map(k => k.trim()).filter(k => k);
+            
+            const requestData = {
+                user_id: formData.get('user_id'),
+                title: formData.get('title'),
+                keywords: keywords,
+                description: formData.get('description') || null
+            };
+
+            console.log('Sending request:', requestData);
+
+            // Show loading state
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('result').style.display = 'none';
+            document.getElementById('generate-btn').disabled = true;
+
+            try {
+                const response = await fetch(`${API_BASE}/generate-image`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestData)
+                });
+
+                const data = await response.json();
+                console.log('Received response:', data);
+
+                displayResult(data, response.ok);
+
+            } catch (error) {
+                console.error('Request failed:', error);
+                displayResult({
+                    success: false,
+                    error: `Network error: ${error.message}`
+                }, false);
+            } finally {
+                // Hide loading state
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('generate-btn').disabled = false;
+            }
+        });
+
+        function displayResult(data, isSuccess) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.className = `result ${isSuccess && data.success ? 'success' : 'error'}`;
+            
+            if (isSuccess && data.success) {
+                let html = '<h3>✅ Image Generated Successfully!</h3>';
+                
+                // Display the generated image
+                if (data.image_base64) {
+                    html += `<img src="data:image/png;base64,${data.image_base64}" 
+                            alt="Generated image" class="generated-image" id="generated-image">`;
+                    html += `<button class="download-btn" onclick="downloadImage()">📥 Download Image</button>`;
+                }
+                
+                // Display generation info
+                html += '<div class="info-grid">';
+                html += `<div class="info-item">
+                    <div class="info-label">Processing Time</div>
+                    <div class="info-value">${data.processing_time?.toFixed(2)}s</div>
+                </div>`;
+                html += `<div class="info-item">
+                    <div class="info-label">Used Cache</div>
+                    <div class="info-value">${data.used_cache ? 'Yes' : 'No'}</div>
+                </div>`;
+                html += '</div>';
+                
+                // Display the prompt used
+                if (data.prompt_used) {
+                    html += '<h4>📝 Prompt Used:</h4>';
+                    html += `<div class="prompt-display">${data.prompt_used}</div>`;
+                }
+                
+                resultDiv.innerHTML = html;
+            } else {
+                // Error case
+                const errorMessage = data.error || data.detail || 'Unknown error occurred';
+                resultDiv.innerHTML = `
+                    <h3>❌ Generation Failed</h3>
+                    <p><strong>Error:</strong> ${errorMessage}</p>
+                    <p>Please check your inputs and try again.</p>
+                `;
+            }
+            
+            resultDiv.style.display = 'block';
+            resultDiv.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function downloadImage() {
+            const img = document.getElementById('generated-image');
+            if (img) {
+                const link = document.createElement('a');
+                link.download = 'generated-image.png';
+                link.href = img.src;
+                link.click();
+            }
+        }
+
+        // Load example data
+        function loadExample(exampleNumber = 0) {
+            const examples = [
+                {
+                    title: "Sunset Beach Scene",
+                    keywords: "sunset, beach, ocean, peaceful",
+                    description: "A serene beach scene at sunset with gentle waves"
+                },
+                {
+                    title: "Modern City Skyline", 
+                    keywords: "city, skyscrapers, modern, lights",
+                    description: "A futuristic city skyline at night with bright lights"
+                },
+                {
+                    title: "Cozy Coffee Shop",
+                    keywords: "coffee, cozy, interior, warm",
+                    description: "A warm and inviting coffee shop interior"
+                }
+            ];
+
+            const example = examples[exampleNumber % examples.length];
+            document.getElementById('title').value = example.title;
+            document.getElementById('keywords').value = example.keywords;
+            document.getElementById('description').value = example.description;
+        }
+
+        // Test connection on page load
+        window.addEventListener('load', testConnection);
+    </script>
+</body>
+</html>

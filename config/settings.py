@@ -13,8 +13,8 @@ class Settings(BaseSettings):
     LANGFUSE_HOST: str = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
     
     # Model Configuration - CORRECTED NAMES
-    LLM_MODEL: str = "gemini-1.5-flash-002"
-    IMAGE_MODEL: str = "imagen-3.0-generate-001"
+    LLM_MODEL: str = "gemma-3n-e4b-it"
+    IMAGE_MODEL: str = "imagen-3.0-generate-002"
 
     # Cache Configuration
     CACHE_TTL: int = 3600

@@ -1,6 +1,9 @@
-from fastapi import FastAPI, HTTPException
+# Updated fastapi_app.py - Fixed async patterns and error handling
+
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 import io
 import base64
 import time
@@ -11,7 +14,6 @@ from pipeline.state import UserInput, PipelineResponse
 from config.settings import settings
 from contextlib import asynccontextmanager
 import logging
-from pipeline.state import PipelineState
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -36,7 +38,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Add CORS middleware AFTER app initialization
+# FIXED: Enhanced CORS middleware configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # In production, specify exact origins
@@ -49,6 +51,9 @@ app.add_middleware(
 # Initialize pipeline
 pipeline = TextToImagePipeline()
 
+# Serve static files (for the frontend)
+app.mount("/static", StaticFiles(directory="static", html=True), name="static")
+
 # Add explicit OPTIONS handler for all paths
 @app.options("/{full_path:path}")
 async def options_handler(full_path: str):
@@ -59,9 +64,15 @@ async def options_handler(full_path: str):
 async def root():
     """Health check endpoint"""
     return {
-        "message": "Text-to-Image Pipeline API", 
+        "message": "Text-to-Image Pipeline API",
         "status": "active",
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "endpoints": {
+            "generate": "/generate-image",
+            "health": "/health",
+            "debug": "/debug-pipeline",
+            "examples": "/examples"
+        }
     }
 
 @app.get("/test")
@@ -75,13 +86,16 @@ async def test_endpoint():
 
 @app.get("/health")
 async def health_check():
-    """Detailed health check"""
+    """Detailed health check - FIXED async patterns"""
     try:
         services = {}
         
         # Check Vertex AI
         try:
-            services["vertex_ai"] = "connected"
+            if hasattr(pipeline.nodes, 'vertex_ai') and pipeline.nodes.vertex_ai:
+                services["vertex_ai"] = "connected"
+            else:
+                services["vertex_ai"] = "not initialized"
         except Exception as e:
             services["vertex_ai"] = f"error: {str(e)}"
         
@@ -116,14 +130,14 @@ async def health_check():
 
 @app.post("/generate-image", response_model=PipelineResponse)
 async def generate_image(request: UserInput):
-    """Generate image from text input with enhanced error handling"""
+    """Generate image from text input - FIXED enhanced error handling and async"""
     try:
         logger.info(f"📝 Received request from user: {request.user_id}")
         logger.info(f"📝 Title: {request.title}")
         logger.info(f"📝 Keywords: {request.keywords}")
         
-        # Validate input
-        if not request.title.strip():
+        # FIXED: Enhanced input validation
+        if not request.title or not request.title.strip():
             logger.warning("❌ Empty title provided")
             raise HTTPException(status_code=400, detail="Title cannot be empty")
         
@@ -131,18 +145,23 @@ async def generate_image(request: UserInput):
             logger.warning("❌ No keywords provided")
             raise HTTPException(status_code=400, detail="At least one keyword is required")
         
+        # Validate keywords are not empty strings
+        valid_keywords = [kw.strip() for kw in request.keywords if kw.strip()]
+        if not valid_keywords:
+            logger.warning("❌ No valid keywords provided")
+            raise HTTPException(status_code=400, detail="At least one non-empty keyword is required")
+        
         # Process request through pipeline with timeout
         logger.info("🔄 Processing through pipeline...")
-        
         try:
             result = await asyncio.wait_for(
                 pipeline.process_request(
                     user_id=request.user_id,
-                    title=request.title,
-                    keywords=request.keywords,
-                    description=request.description
+                    title=request.title.strip(),
+                    keywords=valid_keywords,
+                    description=request.description.strip() if request.description else None
                 ),
-                timeout=60.0  # 60 second timeout
+                timeout=120.0  # 2 minute timeout for complex generations
             )
         except asyncio.TimeoutError:
             logger.error("⏰ Pipeline processing timed out")
@@ -155,8 +174,24 @@ async def generate_image(request: UserInput):
             logger.error(f"❌ Pipeline failed: {error_detail}")
             raise HTTPException(status_code=500, detail=error_detail)
         
+        # FIXED: Convert image_data to base64 string for JSON response
+        response_data = {
+            "success": result["success"],
+            "image_url": result.get("image_url"),
+            "prompt_used": result.get("prompt_used"),
+            "processing_time": result.get("processing_time", 0),
+            "used_cache": result.get("used_cache", False),
+            "error": result.get("error")
+        }
+        
+        # Convert image bytes to base64 string for frontend
+        if result.get("image_data"):
+            image_base64 = base64.b64encode(result["image_data"]).decode('utf-8')
+            response_data["image_base64"] = image_base64
+            logger.info(f"✅ Image converted to base64: {len(image_base64)} characters")
+        
         logger.info("✅ Request processed successfully")
-        return PipelineResponse(**result)
+        return PipelineResponse(**response_data)
         
     except HTTPException:
         raise
@@ -164,7 +199,7 @@ async def generate_image(request: UserInput):
         logger.error(f"💥 Unexpected error: {str(e)}")
         logger.error(f"📍 Traceback: {traceback.format_exc()}")
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail=f"Internal server error: {str(e)}"
         )
 
@@ -174,9 +209,17 @@ async def get_latest_image(user_id: str):
     return {"message": "Image retrieval not implemented in prototype"}
 
 @app.post("/image/download")
-async def download_image(image_data: str):
-    """Download image from base64 data"""
+async def download_image(request: dict):
+    """Download image from base64 data - FIXED input handling"""
     try:
+        image_data = request.get("image_data")
+        if not image_data:
+            raise HTTPException(status_code=400, detail="No image_data provided")
+        
+        # Remove data URL prefix if present
+        if image_data.startswith('data:image/'):
+            image_data = image_data.split(',', 1)[1]
+        
         image_bytes = base64.b64decode(image_data)
         return StreamingResponse(
             io.BytesIO(image_bytes),
@@ -186,11 +229,12 @@ async def download_image(image_data: str):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Invalid image data: {str(e)}")
 
-# Add this to your FastAPI app
 @app.post("/debug-pipeline")
 async def debug_pipeline(request: UserInput):
-    """Debug pipeline step by step"""
+    """Debug pipeline step by step - FIXED state handling"""
     try:
+        from pipeline.state import PipelineState
+        
         # Initialize state
         initial_state = PipelineState(
             user_id=request.user_id,
@@ -223,6 +267,9 @@ async def debug_pipeline(request: UserInput):
             "error": state1.get('error')
         }
         
+        if state1.get('error'):
+            return result
+        
         # Step 2: Check cache
         state2 = await pipeline.nodes.check_cache(state1)
         result["steps"]["check_cache"] = {
@@ -233,7 +280,7 @@ async def debug_pipeline(request: UserInput):
         }
         
         # Step 3: Generate prompt (if no cache)
-        if not state2.get('cached_prompt'):
+        if not state2.get('cached_prompt') and not state2.get('error'):
             state3 = await pipeline.nodes.generate_prompt(state2)
             result["steps"]["generate_prompt"] = {
                 "success": not bool(state3.get('error')),
@@ -242,7 +289,7 @@ async def debug_pipeline(request: UserInput):
             }
         else:
             state3 = state2
-            result["steps"]["generate_prompt"] = {"skipped": "using_cache"}
+            result["steps"]["generate_prompt"] = {"skipped": "using_cache_or_error"}
         
         # Step 4: Check final prompt availability
         final_prompt = state3.get('cached_prompt') or state3.get('generated_prompt')
@@ -253,7 +300,6 @@ async def debug_pipeline(request: UserInput):
         
     except Exception as e:
         return {"error": str(e), "traceback": traceback.format_exc()}
-
 
 @app.get("/examples")
 async def get_examples():

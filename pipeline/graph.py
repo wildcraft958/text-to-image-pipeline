@@ -1,3 +1,5 @@
+# Updated graph.py - Fixed LangGraph workflow and conditional routing
+
 import time
 from typing import Dict, Any
 from langgraph.graph import StateGraph, START, END
@@ -14,9 +16,9 @@ class TextToImagePipeline:
         # Add memory for conversation tracking
         self.checkpointer = InMemorySaver()
         self.compiled_graph = self.graph.compile(checkpointer=self.checkpointer)
-    
+
     def _create_graph(self) -> StateGraph:
-        """Create the LangGraph workflow"""
+        """Create the LangGraph workflow - FIXED routing and edges"""
         # Initialize the graph with our state
         graph = StateGraph(PipelineState)
         
@@ -32,22 +34,27 @@ class TextToImagePipeline:
         graph.add_edge(START, "process_input")
         graph.add_edge("process_input", "check_cache")
         
-        # Fixed conditional routing
+        # FIXED: Conditional routing with proper function and mapping
         def route_after_cache(state: PipelineState) -> str:
             """Route based on cache availability"""
-            if state.get('cached_prompt'):
+            if state.get('error'):
+                print(f"❌ Error in state: {state['error']}")
+                return "finalize_response"  # Go to finalize to handle error
+            elif state.get('cached_prompt'):
                 print(f"✅ Using cached prompt: {state['cached_prompt'][:50]}...")
                 return "generate_image"
             else:
                 print("🔄 No cache found, generating new prompt...")
                 return "generate_prompt"
         
+        # Add conditional edges with explicit path mapping
         graph.add_conditional_edges(
             "check_cache",
             route_after_cache,
             {
                 "generate_prompt": "generate_prompt",
-                "generate_image": "generate_image"
+                "generate_image": "generate_image", 
+                "finalize_response": "finalize_response"
             }
         )
         
@@ -58,15 +65,15 @@ class TextToImagePipeline:
         graph.add_edge("finalize_response", END)
         
         return graph
-    
-    async def process_request(self, 
+
+    async def process_request(self,
                             user_id: str,
-                            title: str, 
-                            keywords: list, 
+                            title: str,
+                            keywords: list,
                             description: str = None) -> Dict[str, Any]:
-        """Process a text-to-image request"""
+        """Process a text-to-image request - FIXED error handling"""
         
-        # Initialize state with start_time
+        # Initialize state with start_time - FIXED: Include start_time
         initial_state = PipelineState(
             user_id=user_id,
             title=title,
@@ -91,14 +98,20 @@ class TextToImagePipeline:
         
         try:
             print(f"🚀 Starting pipeline for: {title}")
+            print(f"🔗 Keywords: {keywords}")
             
             # Run the pipeline
             result = await self.compiled_graph.ainvoke(initial_state, config)
             
-            print(f"📊 Pipeline completed. Success: {not bool(result.get('error'))}")
+            success = not bool(result.get('error'))
+            print(f"📊 Pipeline completed. Success: {success}")
             
-            return {
-                "success": not bool(result.get('error')),
+            if not success:
+                print(f"❌ Error: {result.get('error')}")
+            
+            # FIXED: Return proper response format
+            response = {
+                "success": success,
                 "image_data": result.get('image_data'),
                 "image_url": result.get('image_url'),
                 "prompt_used": result.get('cached_prompt') or result.get('generated_prompt'),
@@ -107,11 +120,26 @@ class TextToImagePipeline:
                 "error": result.get('error')
             }
             
+            # Debug information
+            print(f"🔍 Response debug:")
+            print(f"   - Image data: {'✅' if response['image_data'] else '❌'}")
+            print(f"   - Prompt: {'✅' if response['prompt_used'] else '❌'}")
+            print(f"   - Processing time: {response['processing_time']:.2f}s")
+            print(f"   - Used cache: {response['used_cache']}")
+            
+            return response
+            
         except Exception as e:
             print(f"💥 Pipeline execution failed: {str(e)}")
+            import traceback
+            print(f"📍 Traceback: {traceback.format_exc()}")
+            
             return {
                 "success": False,
                 "error": f"Pipeline execution failed: {str(e)}",
                 "processing_time": time.time() - initial_state.get('start_time', time.time()),
-                "used_cache": False
+                "used_cache": False,
+                "image_data": None,
+                "image_url": None,
+                "prompt_used": None
             }
