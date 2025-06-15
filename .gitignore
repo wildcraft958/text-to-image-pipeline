@@ -14,6 +14,30 @@ __pycache__/
 __pycache__/
 
 *.so
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.so
+*.pyd
+.cpython-*
+
+# Virtual environments
+.venv/
+env/
+
+# VSCode
+.vscode/
+
+# OS generated
+.DS_Store
+Thumbs.db
+
+# Credentials
+*.json
+
+# Langfuse / API keys / secrets
+*.env
 
 ./credentials.json
 
