@@ -42,9 +42,9 @@ class PipelineResponse(BaseModel):
     """Response model for the pipeline"""
     success: bool
     image_url: Optional[str] = None
-    image_data: Optional[str] = None
+    image_data: Optional[str] = None 
     prompt_used: Optional[str] = None
-    prompt_source: Optional[str] = None  # Added to track prompt source
+    prompt_source: Optional[str] = None
     processing_time: float
     used_cache: bool
     error: Optional[str] = None

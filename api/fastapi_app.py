@@ -129,7 +129,7 @@ async def health_check():
 
 @app.post("/generate-image", response_model=PipelineResponse)
 async def generate_image(request: UserInput):
-    """Generate image from text input - FIXED base64 encoding issue"""
+    """Generate image from text input - FIXED field name consistency"""
     try:
         logger.info(f"📝 Received request from user: {request.user_id}")
         logger.info(f"📝 Title: {request.title}")
@@ -173,7 +173,7 @@ async def generate_image(request: UserInput):
             logger.error(f"❌ Pipeline failed: {error_detail}")
             raise HTTPException(status_code=500, detail=error_detail)
         
-        # FIXED: Handle image_data correctly - check if it's bytes or string
+        # FIXED: Use consistent field name 'image_data'
         response_data = {
             "success": result["success"],
             "image_url": result.get("image_url"),
@@ -183,19 +183,19 @@ async def generate_image(request: UserInput):
             "error": result.get("error")
         }
         
-        # Convert image bytes to base64 string for frontend - FIXED encoding issue
+        # Convert image bytes to base64 string for frontend
         if result.get("image_data"):
             image_data = result["image_data"]
             
             # Check if image_data is already a string (base64) or bytes
             if isinstance(image_data, str):
                 # Already base64 encoded
-                response_data["image_base64"] = image_data
+                response_data["image_data"] = image_data  # FIXED: Use image_data consistently
                 logger.info(f"✅ Image already base64 encoded: {len(image_data)} characters")
             elif isinstance(image_data, bytes):
                 # Convert bytes to base64
                 image_base64 = base64.b64encode(image_data).decode('utf-8')
-                response_data["image_base64"] = image_base64
+                response_data["image_data"] = image_base64  # FIXED: Use image_data consistently
                 logger.info(f"✅ Image converted to base64: {len(image_base64)} characters")
             else:
                 logger.error(f"❌ Unexpected image_data type: {type(image_data)}")
@@ -346,4 +346,6 @@ if __name__ == "__main__":
         port=settings.API_PORT,
         reload=True
     )
+
+# To run the FastAPI app, use the command:
 # uvicorn api.fastapi_app:app --host 127.0.0.1 --port 8000 --reload

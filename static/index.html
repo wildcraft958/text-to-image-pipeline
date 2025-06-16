@@ -145,7 +145,6 @@
         }
     </style>
 </head>
-
 <body>
     <div class="container">
         <h1>🖼️ Text-to-Image Generator</h1>
@@ -256,6 +255,7 @@
                     <b>Prompt Used:</b>
                     <div class="prompt-display">${data.prompt_used}</div>`;
 
+                // FIXED: Check for image_data instead of image_base64
                 if (data.image_data) {
                     html += `<img class="generated" src="data:image/png;base64,${data.image_data}" alt="Generated image">`;
                 }
