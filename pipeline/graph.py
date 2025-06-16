@@ -90,7 +90,7 @@ class TextToImagePipeline:
             processing_time=0.0,
             used_cache=False,
             error=None,
-            start_time=time.time()
+            start_time=time.time()  
         )
         
         # Configure the run

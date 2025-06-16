@@ -33,11 +33,14 @@ class VertexAIService:
                 logger.error(f"❌ Failed to initialize Image model: {e}")
                 self.image_model = None
             
-            # Initialize Google AI Studio client for Gemma
+            # Initialize Google AI Studio client for Gemma - FIXED
             try:
                 self.gemma_client = genai.Client(api_key=settings.GOOGLE_AI_STUDIO_API_KEY)
+                self.model_name = settings.LLM_MODEL
+                self.temperature = 0.1
+                
                 self.gemma_config = types.GenerateContentConfig(
-                    temperature=0.1,
+                    temperature=self.temperature,
                     max_output_tokens=400,
                     top_p=0.7,
                     top_k=40
@@ -61,7 +64,7 @@ class VertexAIService:
             logger.warning("Gemma client not available, using fallback prompt generation")
             return self._create_fallback_prompt(title, keywords, description, complexity)
 
-        # Create the prompt template similar to your working example
+        # Create the prompt template
         prompt_template = f"""
 You are an expert visual-prompt engineer. Your job is to convert a simple title plus a list of descriptive tags into a rich, coherent, and 
 evocative prompt for a vision model. Be concise, precise, and imaginative.
@@ -86,10 +89,11 @@ Generate the image prompt now.
         """.strip()
 
         try:
+            # FIXED: Correct method call for Google AI Studio
             response = self.gemma_client.models.generate_content(
-                contents=[prompt_template],           
-                model_name=self.model_name,
-                temperature=self.temperature,
+                model=self.model_name, 
+                contents=prompt_template,
+                config=self.gemma_config
             )
             
             if response and response.text:
@@ -121,7 +125,7 @@ Generate the image prompt now.
         return prompt
 
     async def generate_image(self, prompt: str, complexity: str = "simple") -> Dict[str, Any]:
-        """Generate image using Imagen - this remains unchanged"""
+        """Generate image using Imagen"""
         if not self.image_model:
             return {
                 "image_data": None,
@@ -182,13 +186,11 @@ Generate the image prompt now.
                 img_bytes = io.BytesIO()
                 image._pil_image.save(img_bytes, format='PNG')
                 img_bytes.seek(0)
-                
-                # Convert to base64 for JSON response
-                image_b64 = base64.b64encode(img_bytes.getvalue()).decode('utf-8')
+                image_bytes = img_bytes.getvalue()
                 
                 logger.info("✅ Image generated successfully")
                 return {
-                    "image_data": image_b64,
+                    "image_data": image_bytes,
                     "image_url": None,
                     "success": True
                 }

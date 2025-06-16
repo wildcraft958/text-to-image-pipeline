@@ -1,5 +1,3 @@
-# Updated fastapi_app.py - Fixed async patterns and error handling
-
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -14,8 +12,9 @@ from pipeline.state import UserInput, PipelineResponse
 from config.settings import settings
 from contextlib import asynccontextmanager
 import logging
+import os
 
-# Configure logging
+base_dir = os.path.dirname(os.path.abspath(__file__))
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("text_to_image_pipeline")
 
@@ -38,7 +37,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# FIXED: Enhanced CORS middleware configuration
+# Enhanced CORS middleware configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # In production, specify exact origins
@@ -86,7 +85,7 @@ async def test_endpoint():
 
 @app.get("/health")
 async def health_check():
-    """Detailed health check - FIXED async patterns"""
+    """Detailed health check"""
     try:
         services = {}
         
@@ -130,13 +129,13 @@ async def health_check():
 
 @app.post("/generate-image", response_model=PipelineResponse)
 async def generate_image(request: UserInput):
-    """Generate image from text input - FIXED enhanced error handling and async"""
+    """Generate image from text input - FIXED base64 encoding issue"""
     try:
         logger.info(f"📝 Received request from user: {request.user_id}")
         logger.info(f"📝 Title: {request.title}")
         logger.info(f"📝 Keywords: {request.keywords}")
         
-        # FIXED: Enhanced input validation
+        # Enhanced input validation
         if not request.title or not request.title.strip():
             logger.warning("❌ Empty title provided")
             raise HTTPException(status_code=400, detail="Title cannot be empty")
@@ -174,7 +173,7 @@ async def generate_image(request: UserInput):
             logger.error(f"❌ Pipeline failed: {error_detail}")
             raise HTTPException(status_code=500, detail=error_detail)
         
-        # FIXED: Convert image_data to base64 string for JSON response
+        # FIXED: Handle image_data correctly - check if it's bytes or string
         response_data = {
             "success": result["success"],
             "image_url": result.get("image_url"),
@@ -184,11 +183,23 @@ async def generate_image(request: UserInput):
             "error": result.get("error")
         }
         
-        # Convert image bytes to base64 string for frontend
+        # Convert image bytes to base64 string for frontend - FIXED encoding issue
         if result.get("image_data"):
-            image_base64 = base64.b64encode(result["image_data"]).decode('utf-8')
-            response_data["image_base64"] = image_base64
-            logger.info(f"✅ Image converted to base64: {len(image_base64)} characters")
+            image_data = result["image_data"]
+            
+            # Check if image_data is already a string (base64) or bytes
+            if isinstance(image_data, str):
+                # Already base64 encoded
+                response_data["image_base64"] = image_data
+                logger.info(f"✅ Image already base64 encoded: {len(image_data)} characters")
+            elif isinstance(image_data, bytes):
+                # Convert bytes to base64
+                image_base64 = base64.b64encode(image_data).decode('utf-8')
+                response_data["image_base64"] = image_base64
+                logger.info(f"✅ Image converted to base64: {len(image_base64)} characters")
+            else:
+                logger.error(f"❌ Unexpected image_data type: {type(image_data)}")
+                raise HTTPException(status_code=500, detail="Invalid image data format")
         
         logger.info("✅ Request processed successfully")
         return PipelineResponse(**response_data)
@@ -210,7 +221,7 @@ async def get_latest_image(user_id: str):
 
 @app.post("/image/download")
 async def download_image(request: dict):
-    """Download image from base64 data - FIXED input handling"""
+    """Download image from base64 data"""
     try:
         image_data = request.get("image_data")
         if not image_data:
@@ -231,7 +242,7 @@ async def download_image(request: dict):
 
 @app.post("/debug-pipeline")
 async def debug_pipeline(request: UserInput):
-    """Debug pipeline step by step - FIXED state handling"""
+    """Debug pipeline step by step"""
     try:
         from pipeline.state import PipelineState
         
@@ -335,3 +346,4 @@ if __name__ == "__main__":
         port=settings.API_PORT,
         reload=True
     )
+# uvicorn api.fastapi_app:app --host 127.0.0.1 --port 8000 --reload
