@@ -58,35 +58,45 @@ class VertexAIService:
                             title: str,
                             keywords: list,
                             description: str = None,
-                            complexity: str = "simple") -> str:
+                            complexity: str = "standard") -> str:
         """Generate an enhanced prompt using Gemma via Google AI Studio"""
         if not self.gemma_client:
             logger.warning("Gemma client not available, using fallback prompt generation")
             return self._create_fallback_prompt(title, keywords, description, complexity)
+        
+        # Convert keywords list to a string for the template
+        tags = ", ".join(keywords)
 
         # Create the prompt template
         prompt_template = f"""
-You are an expert visual-prompt engineer. Your job is to convert a simple title plus a list of descriptive tags into a rich, coherent, and 
-evocative prompt for a vision model. Be concise, precise, and imaginative.
+            You are a master prompt engineer for advanced text-to-image models. Your task is to synthesize user inputs into a single, evocative, and highly-detailed prompt.
 
-Title: {title}
-Tags: {', '.join(keywords)}
-Description: {description or 'No additional description'}
-Complexity Level: {complexity}
+            --- CONTEXT ---
+            - Title: {title}
+            - Keywords: {tags}
+            - Description: {description or 'Not provided.'}
+            - Desired Complexity: {complexity}
 
-Guidelines:
-1. Capture the core concept implied by the title.
-2. Weave in each tag so that it influences the style, mood, color palette, composition, or atmosphere.
-3. Describe setting, lighting, textures, and any dramatic details.
-4. If appropriate, add brief artistic style references.
-5. For {complexity} complexity, {'add rich technical details and artistic modifiers' if complexity == 'complex' else 'keep it clean and professional'}.
-6. Do not exceed 300 words.
+            --- GUIDELINES ---
+            1.  **Core Concept**: The final prompt must be a seamless paragraph, starting with the core idea of the Title.
+            2.  **Integrate Keywords**: Naturally weave every keyword into the description to influence the mood, objects, or style.
+            3.  **Use Description**: If a description is provided, use it to enrich the scene's narrative and details.
+            4.  **Adhere to Complexity**:
+                - **simple**: A clean, direct sentence focusing on the main subject.
+                - **standard**: A professional, well-described scene with good detail on lighting and composition.
+                - **complex**: A rich, cinematic prompt. Add technical details like camera shots (e.g., "dramatic wide-angle shot", "macro detail"), specific lighting ("volumetric lighting", "Rembrandt lighting"), and artistic modifiers ("hyperrealistic", "concept art", "in the style of [artist/genre]").
+            5.  **Output Format**: CRITICAL: Output ONLY the final, single-paragraph image prompt and nothing else. Do not add explanations or labels like "Prompt:".
 
-**Important Guideline**
-Output only the final image prompt. Do not preface with explanations or anything extra.
+            --- EXAMPLE ---
+            - Title: "Desert Wanderer"
+            - Keywords: "solitary figure, golden dunes, twilight, wind-swept, 8k"
+            - Description: "A person walking alone in a vast desert."
+            - Desired Complexity: "complex"
+            - **Your Output Should Be:**
+            A lone traveler in flowing robes walks across vast golden dunes at twilight, evoking epic solitude. A dramatic wide-angle shot captures the wind-swept sand ripples under a deep purple sky, silhouette backlit by a low sun. Hyperrealistic, 8K detail, cinematic lighting.
+            ---
 
-Generate the image prompt now.
-        """.strip()
+            Now, generate the prompt for the provided context.""".strip()
 
         try:
             # FIXED: Correct method call for Google AI Studio
