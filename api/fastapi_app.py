@@ -74,21 +74,6 @@ async def options_handler(full_path: str):
     """Handle OPTIONS requests for CORS preflight"""
     return {"message": "OK"}
 
-@app.get("/")
-async def root():
-    """Health check endpoint"""
-    return {
-        "message": "Text-to-Image Pipeline API",
-        "status": "active",
-        "version": "1.0.0",
-        "endpoints": {
-            "generate": "/generate-image",
-            "health": "/health",
-            "debug": "/debug-pipeline",
-            "examples": "/examples"
-        }
-    }
-
 @app.get("/test")
 async def test_endpoint():
     """Simple test endpoint to verify server connectivity"""

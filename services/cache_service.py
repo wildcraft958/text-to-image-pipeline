@@ -3,7 +3,17 @@ import json
 from typing import Optional, List, Tuple, Dict, Any
 from datetime import datetime, timedelta
 import hashlib
+import os
 
+# keep the SQLite file in the project root
+_BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+if not os.path.exists(_BASE_DIR):
+    raise FileNotFoundError(f"Base directory {_BASE_DIR} does not exist.")
+_DB_DIR = os.path.join(_BASE_DIR, "database")
+os.makedirs(_DB_DIR, exist_ok=True)
+
+# default path for the sqlite file
+DEFAULT_DB_PATH = os.path.join(_DB_DIR, "prompt_cache.db")
 class CacheService:
     def __init__(self, db_path: str = "prompt_cache.db"):
         """Initialize SQLite cache"""
