@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 import io
 import base64
@@ -13,6 +13,8 @@ from config.settings import settings
 from contextlib import asynccontextmanager
 import logging
 import os
+import uuid
+from pathlib import Path
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
 logging.basicConfig(level=logging.INFO)
@@ -50,8 +52,21 @@ app.add_middleware(
 # Initialize pipeline
 pipeline = TextToImagePipeline()
 
+# Add this import at the top
+from fastapi.responses import FileResponse
+
+# Add this endpoint BEFORE the static files mount
+@app.get("/")
+async def serve_frontend():
+    """Serve the main HTML file"""
+    return FileResponse("static/index.html")
+
 # Serve static files (for the frontend)
 app.mount("/static", StaticFiles(directory="static", html=True), name="static")
+
+# Ensure the directory for generated images exists outside the API folder
+generated_images_dir = Path(base_dir).parent / "static" / "generated_images"
+generated_images_dir.mkdir(parents=True, exist_ok=True)
 
 # Add explicit OPTIONS handler for all paths
 @app.options("/{full_path:path}")
@@ -129,7 +144,10 @@ async def health_check():
 
 @app.post("/generate-image", response_model=PipelineResponse)
 async def generate_image(request: UserInput):
-    """Generate image from text input - FIXED field name consistency"""
+    """
+    Generate image from text input.
+    Saves the image to a file and returns a URL.
+    """
     try:
         logger.info(f"📝 Received request from user: {request.user_id}")
         logger.info(f"📝 Title: {request.title}")
@@ -173,33 +191,34 @@ async def generate_image(request: UserInput):
             logger.error(f"❌ Pipeline failed: {error_detail}")
             raise HTTPException(status_code=500, detail=error_detail)
         
-        # FIXED: Use consistent field name 'image_data'
+        # --- NEW LOGIC: Save image and create URL ---
+        image_url = None
+        if result.get("image_data") and isinstance(result["image_data"], bytes):
+            image_bytes = result["image_data"]
+            
+            # Generate a unique filename
+            filename = f"{uuid.uuid4()}.png"
+            image_path = generated_images_dir / filename
+            
+            # Save the image bytes to the file
+            with open(image_path, "wb") as f:
+                f.write(image_bytes)
+            
+            # Create a URL path that the frontend can use
+            image_url = f"/static/generated_images/{filename}"
+            logger.info(f"✅ Image saved successfully at: {image_path}")
+            logger.info(f"🔗 Image URL for frontend: {image_url}")
+        
+        # --- Build the response with the new image_url ---
         response_data = {
-            "success": result["success"],
-            "image_url": result.get("image_url"),
+            "success": True,
+            "image_url": image_url,   # URL instead of base64
+            "image_data": None,
             "prompt_used": result.get("prompt_used"),
             "processing_time": result.get("processing_time", 0),
             "used_cache": result.get("used_cache", False),
-            "error": result.get("error")
+            "error": None
         }
-        
-        # Convert image bytes to base64 string for frontend
-        if result.get("image_data"):
-            image_data = result["image_data"]
-            
-            # Check if image_data is already a string (base64) or bytes
-            if isinstance(image_data, str):
-                # Already base64 encoded
-                response_data["image_data"] = image_data  # FIXED: Use image_data consistently
-                logger.info(f"✅ Image already base64 encoded: {len(image_data)} characters")
-            elif isinstance(image_data, bytes):
-                # Convert bytes to base64
-                image_base64 = base64.b64encode(image_data).decode('utf-8')
-                response_data["image_data"] = image_base64  # FIXED: Use image_data consistently
-                logger.info(f"✅ Image converted to base64: {len(image_base64)} characters")
-            else:
-                logger.error(f"❌ Unexpected image_data type: {type(image_data)}")
-                raise HTTPException(status_code=500, detail="Invalid image data format")
         
         logger.info("✅ Request processed successfully")
         return PipelineResponse(**response_data)
@@ -337,6 +356,11 @@ async def get_examples():
             }
         ]
     }
+
+@app.get("/", response_class=FileResponse)
+async def read_root():
+    """Serves the main index.html file"""
+    return "static/index.html"
 
 if __name__ == "__main__":
     import uvicorn

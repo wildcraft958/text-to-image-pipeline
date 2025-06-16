@@ -181,7 +181,8 @@
         <div id="result"></div>
     </div>
     <script>
-        const API_BASE = 'http://127.0.0.1:8000';
+        // In your static/index.html, update the API_BASE
+        const API_BASE = '';  // Empty string for same-origin requests
 
         /* ---------- Helpers ---------- */
         const resultDiv   = document.getElementById('result');
@@ -232,7 +233,7 @@
             genBtn.disabled = true;
 
             try {
-                const res = await fetch(`${API_BASE}/generate-image`, {
+                const res = await fetch(`/generate-image`, {  // Note: no API_BASE prefix needed
                     method : 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body   : JSON.stringify(payload)
@@ -255,9 +256,11 @@
                     <b>Prompt Used:</b>
                     <div class="prompt-display">${data.prompt_used}</div>`;
 
-                // FIXED: Check for image_data instead of image_base64
-                if (data.image_data) {
-                    html += `<img class="generated" src="data:image/png;base64,${data.image_data}" alt="Generated image">`;
+                // --- USE image_url INSTEAD OF image_data ---
+                if (data.image_url) {
+                    html += `<img class="generated" src="${data.image_url}" alt="Generated image">`;
+                } else {
+                    html += '<div>Error: The server did not return an image URL.</div>';
                 }
 
                 showStatus('success', html);
