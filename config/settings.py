@@ -22,8 +22,8 @@ class Settings(BaseSettings):
     # ───────────────────────────
     # Model defaults
     # ───────────────────────────
-    LLM_MODEL: str = "gemma-2-27b-it"
-    IMAGE_MODEL: str = "imagen-3.0-generate-001"
+    LLM_MODEL: str = "gemini-2.5-flash"
+    IMAGE_MODEL: str = "imagen-3.0-generate-002"
 
     # ───────────────────────────
     # Cache

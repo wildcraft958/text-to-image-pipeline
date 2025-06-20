@@ -177,7 +177,7 @@ Return a StoryPlan as JSON.
         try:
             gen_cfg = types.GenerateContentConfig(
                 temperature=0.7,
-                max_output_tokens=1500,
+                # max_output_tokens=1500,
                 top_p=0.8,
                 top_k=40,
                 response_mime_type="application/json",

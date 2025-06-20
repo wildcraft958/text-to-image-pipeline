@@ -111,34 +111,44 @@ class TrendManager:
             cur.execute(sql, (time_threshold, limit))
             return cur.fetchall()         
 
-    # ---------- Soft-max & Top-P ----------
+    # ---------- Soft-max & Nucleus Sampling ----------
     @staticmethod
-    def _softmax(scores, temp: float = 1.0):
-        exps = np.exp((scores - scores.max()) / temp)
+    def _softmax(scores: np.ndarray, temperature: float = 1.0) -> np.ndarray:
+        # A higher temperature flattens the distribution
+        if temperature <= 0:
+            temperature = 1.0
+        exps = np.exp((scores - scores.max()) / temperature)
         return exps / exps.sum()
 
-    def _top_p_sampling(self, rows, p=0.5, k=5):
+    def _nucleus_sample(
+        self,
+        rows: List[Dict],
+        p: float = 0.7,
+        k: int = 5,
+        temperature: float = 1.0
+    ) -> List[Dict]:
         if not rows:
             return []
         scores = np.array([r["engagement_score"] for r in rows], float)
-        probs  = self._softmax(scores)
-        order  = probs.argsort()[::-1]
-        cum    = np.cumsum(probs[order])
+        probs = self._softmax(scores, temperature=temperature)
+        order = probs.argsort()[::-1]
+        cum = np.cumsum(probs[order])
         nucleus_cut = np.searchsorted(cum, p) + 1
         nucleus_idx = order[:nucleus_cut]
         nucleus_probs = probs[nucleus_idx] / probs[nucleus_idx].sum()
         chosen = np.random.choice(
-            nucleus_idx, size=min(k, len(nucleus_idx)), replace=False, p=nucleus_probs
+            nucleus_idx, size=min(k, nucleus_cut), replace=False, p=nucleus_probs
         )
         return [rows[i] for i in chosen]
-
-    # ---------- Public API ----------
+ 
+     # ─── Public API ─────────────────────────────────────────────────────
     def get_trending_prompts(
         self,
         hours_back: int = 3,
         top_n: int = 50,
         p_threshold: float = 0.5,
         num_samples: int = 5,
+        temperature: float = 1.0
     ) -> List[Dict]:
         rows = self.fetch_top_performing_content(hours_back, top_n)
-        return self._top_p_sampling(rows, p_threshold, num_samples)
+        return self._nucleus_sample(rows, p_threshold, num_samples, temperature=temperature)

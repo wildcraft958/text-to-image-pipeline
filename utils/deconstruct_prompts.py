@@ -53,7 +53,6 @@ class PromptComponents(BaseModel):
     original_prompt: str
     engagement_score: float
 
-
 # ───────────────────────────────
 # Gemini wrapper
 # ───────────────────────────────
@@ -79,25 +78,27 @@ class GeminiClient:
     # ---------- public ----------
     def deconstruct(self, prompt: str, score: float) -> Dict:
         """Return a dict matching PromptComponents."""
+        fallback_json = PromptComponents(
+            subject="Unknown",
+            action_setting="Unknown",
+            emotional_tone="Unknown",
+            lighting="Unknown",
+            color_palette="Unknown",
+            camera_angle="Unknown",
+            style_aesthetic="Unknown",
+            composition_framing="Unknown",
+            original_prompt=prompt,
+            engagement_score=score,
+        ).model_dump()
+
         if not self.client:
-            # offline stub
-            return PromptComponents(
-                subject="Unknown",
-                action_setting="Unknown",
-                emotional_tone="Unknown",
-                lighting="Unknown",
-                color_palette="Unknown",
-                camera_angle="Unknown",
-                style_aesthetic="Unknown",
-                composition_framing="Unknown",
-                original_prompt=prompt,
-                engagement_score=score,
-            ).model_dump()
+            log.warning("GenAI client not initialized. Returning fallback.")
+            return fallback_json
 
         try:
             cfg = types.GenerateContentConfig(
                 temperature=0.2,
-                max_output_tokens=400,
+                # max_output_tokens=400,
                 top_p=0.7,
                 response_mime_type="application/json",
                 response_schema=PromptComponents.model_json_schema(),
@@ -108,25 +109,45 @@ class GeminiClient:
                 contents=self._build_prompt(prompt, score),
                 config=cfg,
             )
-            return json.loads(resp.text)
+
+            # --- THE DEFINITIVE HIERARCHY OF CHECKS ---
+
+            # 1. Check if the entire response object is missing.
+            if not resp:
+                log.warning("GenAI response object is None. Likely an SDK or connection issue.")
+                return fallback_json
+
+            # 2. Check for prompt blocking. Must check if prompt_feedback exists first!
+            if resp.prompt_feedback and resp.prompt_feedback.block_reason:
+                log.warning("Request blocked by safety filters. Reason: %s", resp.prompt_feedback.block_reason.name)
+                return fallback_json
+
+            # 3. Check if the response contains any candidates. If not, generation failed.
+            if not resp.candidates:
+                log.warning("Response contains no candidates. Generation likely failed due to safety, recitation, or other reasons.")
+                # At this point, you could also log resp.usage_metadata if it exists
+                return fallback_json
+                
+            # 4. Check the finish reason of the first candidate.
+            candidate = resp.candidates[0]
+            if candidate.finish_reason.name != "STOP":
+                log.warning("Generation stopped for a non-standard reason: %s", candidate.finish_reason.name)
+                return fallback_json
+
+            # 5. Finally, check if the response text is valid before parsing.
+            response_text = resp.text
+            if not response_text:
+                log.error("API returned OK but response text is empty – returning fallback JSON")
+                return fallback_json
+
+            return json.loads(response_text)
+
         except Exception as exc:
             log.error("❌ GenAI error (%s) – returning fallback JSON", exc)
-            return PromptComponents(
-                subject="Unknown",
-                action_setting="Unknown",
-                emotional_tone="Unknown",
-                lighting="Unknown",
-                color_palette="Unknown",
-                camera_angle="Unknown",
-                style_aesthetic="Unknown",
-                composition_framing="Unknown",
-                original_prompt=prompt,
-                engagement_score=score,
-            ).model_dump()
-
+            return fallback_json
 
 # ───────────────────────────────
-# PromptDeconstructor
+# PromptDeConstructor
 # ───────────────────────────────
 class PromptDeconstructor:
     def __init__(self):
@@ -163,6 +184,7 @@ class PromptDeconstructor:
         top_n: int = 100,
         p_threshold: float = 0.7,
         num_samples: int = 5,
+        temperature: float = 200
     ) -> List[Dict]:
         log.info("🔍 Fetching trending prompts")
         rows = self.trend_manager.get_trending_prompts(
@@ -170,6 +192,7 @@ class PromptDeconstructor:
             top_n=top_n,
             p_threshold=p_threshold,
             num_samples=num_samples,
+            temperature=temperature,  # Use a lower temperature for more focused sampling
         )
         if not rows:
             log.warning("No trending prompts found")
@@ -201,7 +224,7 @@ def main():
     log.info("🚀 Prompt Component Library Builder")
     decon = PromptDeconstructor()
     library = decon.build_library(
-        hours_back=24, top_n=100, p_threshold=0.7, num_samples=5
+        hours_back=24, top_n=100, p_threshold=0.7, num_samples=10, temperature=200
     )
 
     if library:
