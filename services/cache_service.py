@@ -15,7 +15,7 @@ os.makedirs(_DB_DIR, exist_ok=True)
 # default path for the sqlite file
 DEFAULT_DB_PATH = os.path.join(_DB_DIR, "prompt_cache.db")
 class CacheService:
-    def __init__(self, db_path: str = "prompt_cache.db"):
+    def __init__(self, db_path: str = DEFAULT_DB_PATH):
         """Initialize SQLite cache"""
         self.db_path = db_path
         self._init_db()
