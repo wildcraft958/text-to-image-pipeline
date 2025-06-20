@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import numpy as np
-from google import genai                                 # ← new SDK
+from google import genai                                
 from google.genai import types
 from pydantic import BaseModel, Field
 

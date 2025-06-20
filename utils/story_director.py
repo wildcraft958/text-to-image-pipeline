@@ -181,7 +181,7 @@ Return a StoryPlan as JSON.
                 top_p=0.8,
                 top_k=40,
                 response_mime_type="application/json",
-                response_schema=StoryPlan.schema(),
+                response_schema=StoryPlan.model_json_schema(),
             )
 
             resp = self.client.models.generate_content(
