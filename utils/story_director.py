@@ -130,7 +130,7 @@ class StoryDirector:
     # ---------- prompt builder ----------
     def _cot_prompt(self, e: Dict[str, List[str]]) -> str:
         return f"""[SYSTEM]
-You are a master storyteller. Produce a 3-panel visual story concept in JSON
+You are a master storyteller. Produce all the required panels of visual story concept in JSON
 matching the provided schema. First think step-by-step (Chain-of-Thought),
 then output ONLY the JSON.
 

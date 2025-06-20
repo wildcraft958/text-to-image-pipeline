@@ -224,7 +224,7 @@ def main():
     log.info("🚀 Prompt Component Library Builder")
     decon = PromptDeconstructor()
     library = decon.build_library(
-        hours_back=24, top_n=100, p_threshold=0.7, num_samples=10, temperature=200
+        hours_back=24, top_n=100, p_threshold=0.9, num_samples=12, temperature=300
     )
 
     if library:
