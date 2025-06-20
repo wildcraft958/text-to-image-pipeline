@@ -1,55 +1,55 @@
-# samples/prompt_deconstructor.py
 """
-Builds a component-library from the most-engaging prompts
-stored in the GeneratedContent table.
+utils/deconstruct_prompts.py
+Phase-1 · Prompt Component Library Builder
+──────────────────────────────────────────
+• Fetches trending prompts via TrendManager (PostgreSQL)
+• Uses the **new** Google Gen AI SDK (≥ 1.0). No more `genai.configure`.
+• Writes component_library_YYYYMMDD_HHMM.json into <project-root>/samples/
+"""
 
-Steps
-1. fetch trending rows through TrendManager              (PostgreSQL)
-2. call Gemini (Google GenAI) to deconstruct each prompt
-3. save & analyse the structured output
-"""
+from __future__ import annotations
 
 import json
 import logging
-from collections import Counter
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Type
+from typing import Dict, List, Optional
 
-from google import genai
+import numpy as np
+from google import genai                                 # ← new SDK
 from google.genai import types
 from pydantic import BaseModel, Field
 
-from config.settings import settings                  
-from services.trend_engine import TrendManager   
+from services.trend_engine import TrendManager
+from config.settings import settings                    # unified config
+
 
 # ───────────────────────────────
-# folders & logging
+# Logging
 # ───────────────────────────────
-PROJECT_ROOT = Path(__file__).resolve().parents[1]        # one level up from utils/
-SAMPLES_DIR  = PROJECT_ROOT / "samples"                   # …/samples
-SAMPLES_DIR.mkdir(parents=True, exist_ok=True)          
-
+log = logging.getLogger("prompt-deconstructor")
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
     level=logging.INFO,
 )
-log = logging.getLogger("prompt-deconstructor")
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SAMPLES_DIR = PROJECT_ROOT / "samples"
+SAMPLES_DIR.mkdir(parents=True, exist_ok=True)
 
 
 # ───────────────────────────────
-# Pydantic model for LLM output
+# Pydantic schema for components
 # ───────────────────────────────
 class PromptComponents(BaseModel):
-    subject: str = Field(description="Main subject of the image.")
-    action_setting: str = Field(description="What the subject is doing / where.")
-    emotional_tone: str = Field(description="Overall mood.")
-    lighting: str = Field(description="Lighting conditions & effects.")
-    color_palette: str = Field(description="Dominant colours / palette.")
-    camera_angle: str = Field(description="Perspective or shot type.")
-    style_aesthetic: str = Field(description="Artistic / visual style.")
-    composition_framing: str = Field(description="Composition & framing.")
+    subject: str = Field(description="Main subject")
+    action_setting: str = Field(description="Action and/or setting")
+    emotional_tone: str = Field(description="Mood / emotion")
+    lighting: str = Field(description="Lighting description")
+    color_palette: str = Field(description="Dominant colours")
+    camera_angle: str = Field(description="Shot or angle")
+    style_aesthetic: str = Field(description="Art style or aesthetic")
+    composition_framing: str = Field(description="Composition / framing")
     original_prompt: str
     engagement_score: float
 
@@ -60,90 +60,103 @@ class PromptComponents(BaseModel):
 class GeminiClient:
     def __init__(self):
         if settings.GOOGLE_AI_STUDIO_API_KEY:
-            genai.configure(api_key=settings.GOOGLE_AI_STUDIO_API_KEY)
-            self.model = genai.GenerativeModel(settings.LLM_MODEL)
-            log.info("✅ Gemini client initialised")
+            self.client = genai.Client(api_key=settings.GOOGLE_AI_STUDIO_API_KEY)
+            log.info("✅ GenAI client initialised (model %s)", settings.LLM_MODEL)
         else:
-            self.model = None
-            log.warning("⚠️  GOOGLE_AI_STUDIO_API_KEY not set – falling back to dummy output")
+            self.client = None
+            log.warning("⚠️  GOOGLE_AI_STUDIO_API_KEY not set – running offline")
 
-    def deconstruct(self, prompt_txt: str, score: float) -> Dict:
-        """
-        Use Gemini to produce a JSON object matching PromptComponents.
-        When the client is not available, return placeholders.
-        """
-        if not self.model:
-            # offline / no-key mode
-            return {
-                "subject": "Unknown",
-                "action_setting": "Unknown",
-                "emotional_tone": "Unknown",
-                "lighting": "Unknown",
-                "color_palette": "Unknown",
-                "camera_angle": "Unknown",
-                "style_aesthetic": "Unknown",
-                "composition_framing": "Unknown",
-                "original_prompt": prompt_txt,
-                "engagement_score": score,
-            }
-
-        system_msg = (
-            "You are an expert prompt analyst. "
-            "Return a JSON **exactly** matching the given schema."
-        )
-        user_msg = f"""
-Prompt: {prompt_txt}
-
-ENGAGEMENT_SCORE: {score}
-
-Break down the prompt into:
-subject, action_setting, emotional_tone, lighting, color_palette,
-camera_angle, style_aesthetic, composition_framing
-"""
-        schema = PromptComponents.model_json_schema()  # OpenAPI-style schema
-
-        cfg = types.GenerationConfig(
-            temperature=0.1,
-            max_output_tokens=400,
-            top_p=0.7,
-            top_k=40,
-            response_mime_type="application/json",
-            response_schema=schema,
+    # ---------- prompt builder ----------
+    @staticmethod
+    def _build_prompt(prompt: str, score: float) -> str:
+        return (
+            "You are an expert prompt analyst. Break the given prompt into structured "
+            "components and return JSON only, matching the provided schema.\n\n"
+            f"PROMPT: {prompt}\n"
+            f"ENGAGEMENT_SCORE: {score}"
         )
 
-        resp = self.model.generate_content(
-            contents=[{"role": "system", "parts": [system_msg]},
-                      {"role": "user",   "parts": [user_msg]}],
-            generation_config=cfg,
-        )
+    # ---------- public ----------
+    def deconstruct(self, prompt: str, score: float) -> Dict:
+        """Return a dict matching PromptComponents."""
+        if not self.client:
+            # offline stub
+            return PromptComponents(
+                subject="Unknown",
+                action_setting="Unknown",
+                emotional_tone="Unknown",
+                lighting="Unknown",
+                color_palette="Unknown",
+                camera_angle="Unknown",
+                style_aesthetic="Unknown",
+                composition_framing="Unknown",
+                original_prompt=prompt,
+                engagement_score=score,
+            ).model_dump()
 
         try:
+            cfg = types.GenerateContentConfig(
+                temperature=0.2,
+                max_output_tokens=400,
+                top_p=0.7,
+                response_mime_type="application/json",
+                response_schema=PromptComponents.model_json_schema(),
+            )
+
+            resp = self.client.models.generate_content(
+                model=settings.LLM_MODEL,
+                contents=self._build_prompt(prompt, score),
+                config=cfg,
+            )
             return json.loads(resp.text)
-        except Exception as exc:            # malformed, fallback
-            log.error("Gemini JSON parse error: %s", exc)
-            return {
-                "subject": "Unknown",
-                "action_setting": "Unknown",
-                "emotional_tone": "Unknown",
-                "lighting": "Unknown",
-                "color_palette": "Unknown",
-                "camera_angle": "Unknown",
-                "style_aesthetic": "Unknown",
-                "composition_framing": "Unknown",
-                "original_prompt": prompt_txt,
-                "engagement_score": score,
-            }
+        except Exception as exc:
+            log.error("❌ GenAI error (%s) – returning fallback JSON", exc)
+            return PromptComponents(
+                subject="Unknown",
+                action_setting="Unknown",
+                emotional_tone="Unknown",
+                lighting="Unknown",
+                color_palette="Unknown",
+                camera_angle="Unknown",
+                style_aesthetic="Unknown",
+                composition_framing="Unknown",
+                original_prompt=prompt,
+                engagement_score=score,
+            ).model_dump()
 
 
 # ───────────────────────────────
-# Main workflow class
+# PromptDeconstructor
 # ───────────────────────────────
 class PromptDeconstructor:
     def __init__(self):
         self.trend_manager = TrendManager()
         self.llm = GeminiClient()
 
-    # ------------ public ------------
+    # ---------- soft-max + nucleus sampling ----------
+    @staticmethod
+    def _softmax(scores: np.ndarray, temperature: float = 1.0) -> np.ndarray:
+        exps = np.exp((scores - scores.max()) / temperature)
+        return exps / exps.sum()
+
+    def _nucleus_sample(
+        self, rows: List[Dict], p: float = 0.7, k: int = 5
+    ) -> List[Dict]:
+        if not rows:
+            return []
+        scores = np.array([r["engagement_score"] for r in rows], float)
+        probs = self._softmax(scores)
+        order = probs.argsort()[::-1]
+        cum = np.cumsum(probs[order])
+        nucleus_sz = np.searchsorted(cum, p) + 1
+        nucleus_idx = order[:nucleus_sz]
+        nucleus_probs = probs[nucleus_idx] / probs[nucleus_idx].sum()
+        chosen = np.random.choice(
+            nucleus_idx, size=min(k, nucleus_sz), replace=False, p=nucleus_probs
+        )
+        return [rows[i] for i in chosen]
+
+    # ---------- main ----------
     def build_library(
         self,
         hours_back: int = 24,
@@ -159,38 +172,26 @@ class PromptDeconstructor:
             num_samples=num_samples,
         )
         if not rows:
-            log.warning("No prompts found for the given window.")
+            log.warning("No trending prompts found")
             return []
 
-        log.info("🧠 Deconstructing %d prompts with Gemini", len(rows))
-        library: List[Dict] = []
+        log.info("🧠 Deconstructing %d prompts", len(rows))
+        components: List[Dict] = []
         for idx, row in enumerate(rows, 1):
-            log.info("[%d/%d] score=%.1f  %.60s", idx, len(rows),
-                     row["engagement_score"], row["prompt"].replace("\n", " ")[:60])
+            log.info("[%d/%d] score=%.1f  %.55s",
+                     idx, len(rows), row["engagement_score"],
+                     row["prompt"].replace("\n", " ")[:55])
             comp = self.llm.deconstruct(row["prompt"], row["engagement_score"])
-            library.append(comp)
-        return library
+            components.append(comp)
 
-    # ------------ helpers ------------
+        return components
+
+    # ---------- I/O ----------
     @staticmethod
-    def save_to_file(data: List[Dict], path: Path) -> None:
+    def save(data: List[Dict], path: Path):
         with path.open("w", encoding="utf-8") as fh:
             json.dump(data, fh, indent=2, ensure_ascii=False)
         log.info("💾 Saved component library → %s", path)
-
-    @staticmethod
-    def analyse(data: List[Dict]) -> None:
-        if not data:
-            return
-        log.info("📊 ANALYSIS\n" + "═" * 50)
-        subjects = [d["subject"] for d in data]
-        log.info("🎯 Top subjects: %s", ", ".join(list(dict.fromkeys(subjects))[:5]))
-        styles = " ".join(d["style_aesthetic"].lower() for d in data)
-        common = Counter(styles.split()).most_common(5)
-        log.info("🎨 Style keywords: %s",
-                 ", ".join(f"{w}({c})" for w, c in common))
-        avg_score = sum(d["engagement_score"] for d in data) / len(data)
-        log.info("📈 Average engagement score: %.1f", avg_score)
 
 
 # ───────────────────────────────
@@ -199,16 +200,16 @@ class PromptDeconstructor:
 def main():
     log.info("🚀 Prompt Component Library Builder")
     decon = PromptDeconstructor()
-    library = decon.build_library(hours_back=24, top_n=100,
-                                  p_threshold=0.7, num_samples=5)
+    library = decon.build_library(
+        hours_back=24, top_n=100, p_threshold=0.7, num_samples=5
+    )
 
     if library:
-        out_path = SAMPLES_DIR / f"component_library_{datetime.now():%Y%m%d_%H%M}.json"
-        decon.save_to_file(library, out_path)
-        decon.analyse(library)
-        # show the first example
-        print("\n📋 EXAMPLE COMPONENT")
-        print(json.dumps(library[0], indent=2, ensure_ascii=False))
+        out = SAMPLES_DIR / f"component_library_{datetime.now():%Y%m%d_%H%M}.json"
+        decon.save(library, out)
+        # simple stats
+        subjects = {c["subject"] for c in library}
+        log.info("📊 Unique subjects: %d", len(subjects))
     else:
         log.warning("No components extracted.")
 
