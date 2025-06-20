@@ -1,0 +1,1 @@
+# write a code to stich together panels from output/ latest folder into comic like pannels

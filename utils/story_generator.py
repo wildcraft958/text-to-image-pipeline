@@ -16,6 +16,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+import time
 
 import vertexai
 from vertexai.preview.vision_models import ImageGenerationModel
@@ -171,6 +172,9 @@ class StoryGenerator:
 
             except Exception as e:
                 logger.error(f"❌ Failed to generate or save image for Panel {panel.panel}: {e}")
+
+            # Wait 60 seconds before generating the next panel
+            time.sleep(60)
 
         logger.info("✨ All panels have been generated.")
 
