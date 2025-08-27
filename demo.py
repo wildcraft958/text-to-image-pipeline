@@ -11,12 +11,3 @@ trending_prompts = tm.get_trending_prompts(
 print(f"Found {len(trending_prompts)} trending prompts.")
 print(trending_prompts)
 
-
-
-# from google import genai
-# client = genai.Client(api_key="AIzaSyDGVlrguCu4TctJjx1bb1iemsgf9d5HYUc")
-# resp = client.models.generate_content(
-#     model="gemini-2.5-flash",
-#     contents="ping"
-# )
-# print(resp.text)          # should return “pong” (or similar)
